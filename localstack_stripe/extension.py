@@ -18,7 +18,7 @@ def load_stripe_extension():
 
     # create a proxy
     backend = f"http://localhost:{port}"
-    endpoint = http.path_forwarder(backend)
+    endpoint = http.ProxyHandler(backend)
 
     # add proxy rules to gateway
     gateway.custom_routes.add(
