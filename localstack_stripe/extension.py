@@ -1,41 +1,47 @@
 import atexit
 import logging
 
-from localstack.extensions.api import hooks, gateway, http, services
+from localstack.extensions.api import Extension, http, services
 
 LOG = logging.getLogger(__name__)
 
 
-@hooks.on_start()
-def load_stripe_extension():
-    LOG.info("loading stripe extension")
+class LocalstripeExtension(Extension):
+    name = "localstripe"
 
-    from . import localstripe
+    backend_url: str
 
-    port = services.external_service_ports.reserve_port()
-    localstripe.start(port)
-    atexit.register(localstripe.shutdown)
+    def on_localstack_start(self):
+        # start localstripe when localstack starts
+        from . import localstripe
 
-    # create a proxy
-    backend = f"http://localhost:{port}"
-    endpoint = http.ProxyHandler(backend)
+        port = services.external_service_ports.reserve_port()
+        self.backend_url = f"http://localhost:{port}"
 
-    # add proxy rules to gateway
-    gateway.custom_routes.add(
-        "/stripe",
-        endpoint=endpoint,
-    )
-    gateway.custom_routes.add(
-        "/stripe/<path:path>",
-        endpoint=endpoint,
-    )
-    gateway.custom_routes.add(
-        "/",
-        host="stripe.localhost.localstack.cloud:<port>",
-        endpoint=endpoint,
-    )
-    gateway.custom_routes.add(
-        "/<path:path>",
-        host="stripe.localhost.localstack.cloud:<port>",
-        endpoint=endpoint,
-    )
+        localstripe.start(port)
+        atexit.register(localstripe.shutdown)
+
+    def update_gateway_routes(self, router: http.Router[http.RouteHandler]):
+        # a ProxyHandler forwards all incoming requests to the backend URL
+        endpoint = http.ProxyHandler(self.backend_url)
+
+        # add path routes for localhost:4566/stripe
+        router.add(
+            "/stripe",
+            endpoint=endpoint,
+        )
+        router.add(
+            "/stripe/<path:path>",
+            endpoint=endpoint,
+        )
+        # add alternative host routes for stripe.localhost.localstack.cloud:4566
+        router.add(
+            "/",
+            host="stripe.localhost.localstack.cloud:<port>",
+            endpoint=endpoint,
+        )
+        router.add(
+            "/<path:path>",
+            host="stripe.localhost.localstack.cloud:<port>",
+            endpoint=endpoint,
+        )
