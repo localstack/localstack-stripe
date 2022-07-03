@@ -11,7 +11,7 @@ class LocalstripeExtension(Extension):
 
     backend_url: str
 
-    def on_localstack_start(self):
+    def on_platform_start(self):
         # start localstripe when localstack starts
         from . import localstripe
 
